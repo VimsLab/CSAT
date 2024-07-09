@@ -20,7 +20,7 @@ from natsort import natsorted
 from collections import defaultdict
 
 root_folder = "../Retina data/Images Only"
-main_folder = "../Retina data" #/Images Only"
+main_folder = "../Retina data" 
 sub_folders = os.listdir(main_folder)
 sub_folders = [path.join(main_folder, sf) for sf in sub_folders if path.isdir(path.join(main_folder, sf))]
 
@@ -436,8 +436,8 @@ def append_textfile(fileto, new_names):
 
 
 def flippers():
-	textfilepath = '../scr/dent/data/train.txt'
-	pickle_file_path = '../scr/'
+	textfilepath = '../csat/data/train.txt'
+	pickle_file_path = '../csat/'
 	filenames = read_paths_textfile(textfilepath)
 	new_names = generate_flip_names(filenames)
 	for file, new_name in zip(filenames, new_names):
@@ -519,16 +519,7 @@ if __name__ == '__main__':
 	ann_files = anno_from_image(img_files)
 
 	f, p, t = ids(img_files)
-
-	a = getsubs(main_folder)
-	b = getsubs(root_folder)
-	a.extend(b)
-	
-
-	getstats(a)
-	
-
-	# make_images_and_annos(img_files, ann_files, f)
+	make_images_and_annos(img_files, ann_files, f)
 
 
 	

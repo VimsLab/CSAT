@@ -115,7 +115,6 @@ class SiameseNetwork(nn.Module):
         embedding1 = self.encoder(x1)
         embedding2 = self.encoder(x2)
 
-        # return self.act(embedding1), self.act(embedding2)
         return embedding1, embedding2
 
 # 
@@ -126,42 +125,18 @@ def get_distance(a,b, eps=1e-5):
     return 1-distance+eps
 
 
-
-# def contrastive_focal_loss(rank, emb1, emb2, target, gamma=2, eps=1e-5, alpha=0.5, phase='train'):    
-    
-    logit = get_distance(emb1, emb2)
-    p_t = torch.where(target==0, eps+1-logit, eps+logit)
-    alpha = torch.ones_like(target)*alpha
-    alpha_t = torch.where(target==1, alpha, 1-alpha)
-    ce = -torch.log(p_t)
-    cf_loss = ce * alpha_t * (1-p_t)**gamma    
-    print([(d.item(), e.item(), t.item(), c.item()) for d,e,t,c in zip(p_t, ce,target, cf_loss)])
-  
-    loss = torch.mean(cf_loss) 
-    # print(A)
-    
-    d_name = 'distance_' + phase
-
-    if wb:
-        wandb.log({d_name: torch.mean(p_t)})
-    return loss
-
-
-
 def contrastive_focal_loss(rank, emb1, emb2, target, gamma=3, eps=1e-5, alpha=0.7, phase='train', nc=2):    
     
     logit = get_distance(emb1, emb2)
     x = torch.zeros(target.shape[0], nc).to(rank)
     x[...,0] = logit 
     x[...,1] = 1 - logit
-    # print(x, target.shape, x.shape)
 
     alpha_t = torch.tensor([alpha, 1-alpha]).to(rank)
    
     nll_loss = nn.NLLLoss(weight=alpha_t, reduction='none')
 
     log_p = F.log_softmax(x, dim=-1)
-    # print(log_p, target.shape)
     ce = nll_loss(log_p.float(), target.long())
     all_rows = torch.arange(len(x))
     log_pt = log_p[all_rows, target.long()]
@@ -170,7 +145,6 @@ def contrastive_focal_loss(rank, emb1, emb2, target, gamma=3, eps=1e-5, alpha=0.
     loss = focal_term*ce 
   
     loss = torch.mean(loss) 
-    # print(A)
     
     d_name = 'distance_' + phase
 
@@ -195,7 +169,6 @@ def save_model(root, siamese_net, epoch, optimizer, acc, best_accuracy, fold):
             'best_val_acc': best_accuracy.item(),
         }
     torch.save(checkpoint, save_path)
-    # print(('\n'+'%44s'+'%22s') %('Model saved successfully in ', save_path))
     return best_accuracy
 
 
@@ -218,9 +191,8 @@ def train_epoch(rank, siamese_net, fold, optimizer, train_loader, val_loader, be
         with autocast():
             embeddings1, embeddings2 = siamese_net(x1, x2)
             dist = nn.CosineSimilarity(dim=1, eps=1e-5)(embeddings1[:,-1], embeddings2[:,-1])# pairwise(embeddings1[:,-1], embeddings2[:,-1])
-            # loss = contrastive_focal_loss(rank, embeddings1[:,-1], embeddings2[:,-1], targets, phase='train')
-            loss = sigmoid_focal_loss(dist, targets, gamma=3.0, reduction='none')
-            # print('\n',[(d.item(), l.item(), t.item()) for d,l,t in zip(dist, loss, targets)])
+            loss = contrastive_focal_loss(rank, embeddings1[:,-1], embeddings2[:,-1], targets, phase='train')
+            # loss = sigmoid_focal_loss(dist, targets, gamma=3.0, reduction='none')
 
         loss = torch.sum(loss)
         losses.adds(loss)
@@ -236,16 +208,11 @@ def train_epoch(rank, siamese_net, fold, optimizer, train_loader, val_loader, be
         if wb:
             wandb.log({"train_loss": loss, "train_step":(epoch+1)*(batch_idx+1)})
 
-        if rank==0:
-            # dist= get_distance(embeddings1[:,-1], embeddings2[:,-1])
-            # print([(d.item(),t.item(), l.item()) for d,t, l in zip(dist[:20], targets[:20])])
-            
+        if rank==0:            
             mem = f'{torch.cuda.max_memory_allocated() / (1024 ** 3) if torch.cuda.is_available() else 0:.3g}G'  # (GB)
             pbar.set_description(('%44s'+'%22s'*2 + '%22.4g') % 
                 (f'{fold}', f'{epoch}/{epochs - 1}', mem, avg_ls))
 
-        # if rank==0 and batch_idx>10:
-        #     break
     if wb:
         wandb.log({"epoch_loss": avg_ls})
 
@@ -256,10 +223,6 @@ def train_epoch(rank, siamese_net, fold, optimizer, train_loader, val_loader, be
         best_accuracy=save_model(opt.root, siamese_net, epoch, optimizer, acc, best_accuracy, fold)
         if wb:
             wandb.log({"best_accuracy": best_accuracy})
-
-
-    # return siamese_net, optimizer
-    # best_accuracy = dist.all_reduce(best_accuracy, op=dist.ReduceOp.SUM)
     return best_accuracy
 
 
@@ -271,8 +234,6 @@ def validate(rank, siamese_net, val_loader, e, thres=0.0):
     total_loss = Meter(1, rank=rank)
     crr = Meter(1, rank=rank)
     pairwise = nn.PairwiseDistance(p=2)
-
-    # siamese_net.train(False)
     with torch.no_grad():
         # total_loss = 0 
         # corrects = 0
@@ -293,7 +254,6 @@ def validate(rank, siamese_net, val_loader, e, thres=0.0):
             embeddings1, embeddings2 = siamese_net(x1, x2)
             dist= nn.CosineSimilarity(dim=1, eps=1e-5)(embeddings1[:,-1], embeddings2[:,-1]) 
             loss = sigmoid_focal_loss(dist, targets, alpha=0.15, gamma=2.0, reduction='sum') #contrastive_focal_loss(rank, embeddings1[:,-1], embeddings2[:,-1], targets, phase='val')
-            #pairwise(embeddings1[:,-1], embeddings2[:,-1]) #get_distance(embeddings1[:,-1], embeddings2[:,-1])
             
             threshold = torch.ones_like(dist)*thres
             op = torch.relu(torch.sign(threshold-dist))
@@ -306,10 +266,6 @@ def validate(rank, siamese_net, val_loader, e, thres=0.0):
             avg_loss = total_loss.returns(total_loss.means('r'))
 
 
-            # if rank==0:
-            #     print([(d.item(),o.item(),t.item()) for d,o,t in zip(dist[:20], op[:20], targets[:20])])
-
-          
             correct = op.eq(targets)
             tp = correct[op==1].sum().item()
             tn = correct[op==0].sum().item()
@@ -321,23 +277,14 @@ def validate(rank, siamese_net, val_loader, e, thres=0.0):
             tps += tp
             tns += tn
             total += targets.size(0)
-            # corrects += correct 
 
             crr.adds(correct)
-            
-
-            # accumulate loss.item()
-            # total_loss += loss.item()
+           
 
             if rank==0:
                 pbar.set_description(('%44s'+'%22s'*2 +'%22.4g' * 2) % (correct, f'({tp},{p})', f'({tn},{n})', correct/(p+n), loss.item()))
 
-            # if rank==0 and batch_idx>10:
-            #     break
-            
-
-        # calculate average loss and accuracy
-        # avg_loss = total_loss / len(val_loader)
+           
         corrects = crr.returns(crr.sums('r'))
         incorrects = total - corrects
         accuracy = corrects / total
@@ -358,12 +305,10 @@ def tx():
         transforms.RandomRotation(degrees=5),
         transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
         transforms.ToTensor(),
-        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ]),
 
         'val': transforms.Compose([
         transforms.ToTensor(),
-        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         }
     return tx_dict
@@ -399,15 +344,9 @@ def pretrainer(rank, world_size, opt):
     
     tx_dict = tx()
 
-    # while fold<folds:   
     # create model and optimizer
     encoder = Encoder(hidden_dim=256, num_encoder_layers=6, nheads=8)
     siamese_net = SiameseNetwork(encoder).to(rank)
-    # siamese_net.train()
-    # pytorch_total_params = sum(p.numel() for p in siamese_net.parameters() if p.requires_grad)
-    # print(pytorch_total_params)
-    # print(A)
-
 
     # Wrap the model with DistributedDataParallel
     siamese_net = DDP(siamese_net, device_ids=[rank], find_unused_parameters=False)
@@ -476,10 +415,7 @@ def pretrainer(rank, world_size, opt):
         lr_scheduler.step() 
         torch.cuda.empty_cache()
         gc.collect()
-            
-                
-        # fold = fold+1
-        # if fold<folds:
+        
     if wb:
         wandb.finish()
 
