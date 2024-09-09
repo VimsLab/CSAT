@@ -1,6 +1,7 @@
 # Official implementation of Cross-Scan Attention Transformer (CSAT)
 
 ## Prepare Dataset
+Download pickle.zip from [link](https://drive.google.com/file/d/1GSaanysnf2dYD6pqomuUOGOHfxyfO54W/view?usp=sharing)
 To prepare your own OCT dataset for SCR detection
 ```shell
 cd csat/
