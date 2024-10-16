@@ -56,3 +56,16 @@ python validate.py
 # to modify arguments
 python validate.py --root <str> --dataroot <str> --world_size <int> --weights <str> --nc <int> --r <int> --space <int> --batch <int>
 ```
+
+## Citation
+```
+@InProceedings{csat_scr,
+author="Bhattarai, Ashuta
+and Jin, Jing
+and Kambhamettu, Chandra",
+title="Analyzing Adjacent B-Scans to Localize Sickle Cell Retinopathy In OCTs",
+booktitle="Medical Image Computing and Computer Assisted Intervention -- MICCAI 2024",
+year="2024",
+publisher="Springer Nature Switzerland",
+pages="574--584"}
+```
